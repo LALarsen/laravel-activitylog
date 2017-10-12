@@ -25,11 +25,17 @@ trait DetectsChanges
 
     public function attributesToBeLogged(): array
     {
-        if (! isset(static::$logAttributes)) {
-            return [];
+        $attributes = [];
+
+        if (isset(static::$logFillable)) {
+            $attributes = array_merge($attributes, $this->fillable);
         }
 
-        return static::$logAttributes;
+        if (isset(static::$logAttributes)) {
+            $attributes = array_merge($attributes, static::$logAttributes);
+        }
+
+        return $attributes;
     }
 
     public function shouldlogOnlyDirty(): bool
@@ -47,7 +53,11 @@ trait DetectsChanges
             return [];
         }
 
-        $properties['attributes'] = static::logChanges($this->exists ? $this->fresh() : $this);
+        $properties['attributes'] = static::logChanges(
+            $this->exists
+                ? $this->fresh() ?? $this
+                : $this
+        );
 
         if (static::eventsToBeRecorded()->contains('updated') && $processingEvent == 'updated') {
             $nullProperties = array_fill_keys(array_keys($properties['attributes']), null);

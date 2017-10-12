@@ -36,6 +36,47 @@ class LogsActivityTest extends TestCase
     }
 
     /** @test */
+    public function it_can_skip_logging_model_events_if_asked_to()
+    {
+        $article = new $this->article();
+        $article->disableLogging();
+        $article->name = 'my name';
+        $article->save();
+
+        $this->assertCount(0, Activity::all());
+        $this->assertNull($this->getLastActivity());
+    }
+
+    /** @test */
+    public function it_can_switch_on_activity_logging_after_disabling_it()
+    {
+        $article = new $this->article();
+
+        $article->disableLogging();
+        $article->name = 'my name';
+        $article->save();
+
+        $article->enableLogging();
+        $article->name = 'my new name';
+        $article->save();
+
+        $this->assertCount(1, Activity::all());
+        $this->assertInstanceOf(get_class($this->article), $this->getLastActivity()->subject);
+        $this->assertEquals($article->id, $this->getLastActivity()->subject->id);
+        $this->assertEquals('updated', $this->getLastActivity()->description);
+    }
+
+    /** @test */
+    public function it_can_skip_logging_if_asked_to_for_update_method()
+    {
+        $article = new $this->article();
+        $article->disableLogging()->update(['name' => 'How to log events']);
+
+        $this->assertCount(0, Activity::all());
+        $this->assertNull($this->getLastActivity());
+    }
+
+    /** @test */
     public function it_will_log_an_update_of_the_model()
     {
         $article = $this->createArticle();
@@ -80,6 +121,13 @@ class LogsActivityTest extends TestCase
         $this->assertEquals(get_class($this->article), $this->getLastActivity()->subject_type);
         $this->assertEquals($article->id, $this->getLastActivity()->subject_id);
         $this->assertEquals('deleted', $this->getLastActivity()->description);
+
+        $article->forceDelete();
+
+        $this->assertCount(3, Activity::all());
+
+        $this->assertEquals('deleted', $this->getLastActivity()->description);
+        $this->assertNull($article->fresh());
     }
 
     /** @test */
@@ -114,7 +162,7 @@ class LogsActivityTest extends TestCase
     /** @test */
     public function it_can_fetch_soft_deleted_models()
     {
-        $this->app['config']->set('laravel-activitylog.subject_returns_soft_deleted_models', true);
+        $this->app['config']->set('activitylog.subject_returns_soft_deleted_models', true);
 
         $article = $this->createArticle();
 
