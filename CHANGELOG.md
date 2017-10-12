@@ -2,6 +2,35 @@
 
 All notable changes to `spatie/laravel-activitylog` will be documented in this file
 
+## 2.1.2 - 2017-09-28
+- fix for logging changes attributes when deleting soft deletable models
+
+## 2.1.1 - 2017-09-12
+- make sure `properties` always is a collection
+
+## 2.1.0 - 2017-09-19
+- added support for logging fillable attributes
+
+## 2.0.0 - 2017-08-30
+- added support for Laravel 5.5, dropped support for older laravel versions
+- renamed config file from `laravel-activitylog` to `activitylog`
+- rename `getChangesAttribute` function to `changes` so it doesn't conflict with Laravel's native functionality
+
+## 1.16.0 - 2017-06-28
+- added `enableLogging` and `disableLogging`
+
+## 1.15.5 - 2017-08-08
+- fix model scope
+
+## 1.15.4 - 2017-08-05
+- fix detecting `SoftDeletes`
+
+## 1.15.3 - 2017-06-23
+- fix for when there is no 'web' guard
+
+## 1.15.2 - 2017-06-15
+- fixes errors in `DetectsChanges`
+
 ## 1.15.1 - 2017-04-28
 - fixes error in `DetectsChanges`
 

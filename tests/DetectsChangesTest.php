@@ -6,6 +6,7 @@ use Spatie\Activitylog\Models\Activity;
 use Spatie\Activitylog\Test\Models\User;
 use Spatie\Activitylog\Test\Models\Article;
 use Spatie\Activitylog\Traits\LogsActivity;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class DetectsChangesTest extends TestCase
 {
@@ -17,7 +18,7 @@ class DetectsChangesTest extends TestCase
         parent::setUp();
 
         $this->article = new class() extends Article {
-            static $logAttributes = ['name', 'text'];
+            public static $logAttributes = ['name', 'text'];
 
             use LogsActivity;
         };
@@ -37,14 +38,14 @@ class DetectsChangesTest extends TestCase
             ],
         ];
 
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     /** @test */
     public function it_can_store_the_relation_values_when_creating_a_model()
     {
         $articleClass = new class() extends Article {
-            static $logAttributes = ['name', 'text', 'user.name'];
+            public static $logAttributes = ['name', 'text', 'user.name'];
 
             use LogsActivity;
         };
@@ -76,7 +77,7 @@ class DetectsChangesTest extends TestCase
             ],
         ];
 
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     /** @test */
@@ -100,7 +101,7 @@ class DetectsChangesTest extends TestCase
             ],
         ];
 
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     /** @test */
@@ -121,14 +122,41 @@ class DetectsChangesTest extends TestCase
             ],
         ];
 
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
+    }
+
+    /** @test */
+    public function it_can_store_dirty_changes_for_swapping_values()
+    {
+        $article = $this->createDirtyArticle();
+
+        $originalName = $article->name;
+        $originalText = $article->text;
+
+        $article->text = $originalName;
+        $article->name = $originalText;
+
+        $article->save();
+
+        $expectedChanges = [
+            'attributes' => [
+                'name' => $originalText,
+                'text' => $originalName,
+            ],
+            'old'        => [
+                'name' => $originalName,
+                'text' => $originalText,
+            ],
+        ];
+
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     /** @test */
     public function it_can_store_the_changes_when_updating_a_related_model()
     {
         $articleClass = new class() extends Article {
-            static $logAttributes = ['name', 'text', 'user.name'];
+            public static $logAttributes = ['name', 'text', 'user.name'];
 
             use LogsActivity;
         };
@@ -162,16 +190,16 @@ class DetectsChangesTest extends TestCase
                 ],
         ];
 
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     /** @test */
     public function it_can_store_the_dirty_changes_when_updating_a_related_model()
     {
         $articleClass = new class() extends Article {
-            static $logAttributes = ['name', 'text', 'user.name'];
+            public static $logAttributes = ['name', 'text', 'user.name'];
 
-            static $logOnlyDirty = true;
+            public static $logOnlyDirty = true;
 
             use LogsActivity;
         };
@@ -201,14 +229,14 @@ class DetectsChangesTest extends TestCase
                 ],
         ];
 
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     /** @test */
     public function it_will_store_no_changes_when_not_logging_attributes()
     {
         $articleClass = new class() extends Article {
-            static $logAttributes = [];
+            public static $logAttributes = [];
 
             use LogsActivity;
         };
@@ -219,7 +247,7 @@ class DetectsChangesTest extends TestCase
 
         $article->save();
 
-        $this->assertEquals(collect(), $this->getLastActivity()->changes);
+        $this->assertEquals(collect(), $this->getLastActivity()->changes());
     }
 
     /** @test */
@@ -236,15 +264,55 @@ class DetectsChangesTest extends TestCase
         ]);
 
         $this->assertEquals('deleted', $this->getLastActivity()->description);
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes);
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes());
+    }
+
+    /** @test */
+    public function it_will_store_the_values_when_deleting_the_model_with_softdeletes()
+    {
+        $articleClass = new class() extends Article {
+            public static $logAttributes = ['name', 'text'];
+
+            use LogsActivity, SoftDeletes;
+        };
+
+        $article = new $articleClass();
+        $article->name = 'my name';
+        $article->save();
+
+        $article->delete();
+
+        $expectedChanges = collect([
+            'attributes' => [
+                'name' => 'my name',
+                'text' => null,
+            ],
+        ]);
+
+        $this->assertEquals('deleted', $this->getLastActivity()->description);
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes());
+
+        $article->forceDelete();
+
+        $expectedChanges = collect([
+            'attributes' => [
+                'name' => 'my name',
+            ],
+        ]);
+
+        $activities = $article->activity;
+
+        $this->assertCount(3, $activities);
+        $this->assertEquals('deleted', $this->getLastActivity()->description);
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes());
     }
 
     /** @test */
     public function it_can_store_the_changes_of_array_casted_properties()
     {
         $articleClass = new class() extends Article {
-            static $logAttributes = ['json'];
-            static $logOnlyDirty = true;
+            public static $logAttributes = ['json'];
+            public static $logOnlyDirty = true;
             protected $casts = ['json' => 'collection'];
 
             use LogsActivity;
@@ -269,7 +337,57 @@ class DetectsChangesTest extends TestCase
                 ],
             ],
         ];
-        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes->toArray());
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
+    }
+
+    /** @test */
+    public function it_can_use_fillable_as_loggable_attributes()
+    {
+        $articleClass = new class() extends Article {
+            protected $fillable = ['name', 'text'];
+            protected static $logFillable = true;
+
+            use LogsActivity;
+        };
+
+        $article = new $articleClass();
+        $article->name = 'my name';
+        $article->save();
+
+        $expectedChanges = [
+            'attributes' => [
+                'name' => 'my name',
+                'text' => null,
+            ],
+        ];
+
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
+    }
+
+    /** @test */
+    public function it_can_use_both_fillable_and_log_attributes()
+    {
+        $articleClass = new class() extends Article {
+            protected $fillable = ['name'];
+            protected static $logAttributes = ['text'];
+            protected static $logFillable = true;
+
+            use LogsActivity;
+        };
+
+        $article = new $articleClass();
+        $article->name = 'my name';
+        $article->text = 'my text';
+        $article->save();
+
+        $expectedChanges = [
+            'attributes' => [
+                'name' => 'my name',
+                'text' => 'my text',
+            ],
+        ];
+
+        $this->assertEquals($expectedChanges, $this->getLastActivity()->changes()->toArray());
     }
 
     protected function createArticle(): Article
@@ -284,9 +402,9 @@ class DetectsChangesTest extends TestCase
     protected function createDirtyArticle(): Article
     {
         $articleClass = new class() extends Article {
-            static $logAttributes = ['name', 'text'];
+            public static $logAttributes = ['name', 'text'];
 
-            static $logOnlyDirty = true;
+            public static $logOnlyDirty = true;
 
             use LogsActivity;
         };
