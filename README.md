@@ -2,13 +2,15 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/spatie/laravel-activitylog.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-activitylog)
 [![Build Status](https://img.shields.io/travis/spatie/laravel-activitylog/master.svg?style=flat-square)](https://travis-ci.org/spatie/laravel-activitylog)
+[![Code coverage](https://scrutinizer-ci.com/g/spatie/laravel-activitylog/badges/coverage.png)](https://scrutinizer-ci.com/g/spatie/laravel-activitylog)
 [![Quality Score](https://img.shields.io/scrutinizer/g/spatie/laravel-activitylog.svg?style=flat-square)](https://scrutinizer-ci.com/g/spatie/laravel-activitylog)
 [![StyleCI](https://styleci.io/repos/61802818/shield)](https://styleci.io/repos/61802818)
 [![Total Downloads](https://img.shields.io/packagist/dt/spatie/laravel-activitylog.svg?style=flat-square)](https://packagist.org/packages/spatie/laravel-activitylog)
 
-The `spatie/laravel-activitylog` package provides easy to use functions to log the activities of the users of your app. It can also automatically log model events. All activity will be stored in the `activity_log` table.
+The `spatie/laravel-activitylog` package provides easy to use functions to log the activities of the users of your app. It can also automatically log model events. 
+The Package stores all activity in the `activity_log` table.
 
-Here's a litte demo of how you can use it:
+Here's a demo of how you can use it:
 
 ```php
 activity()->log('Look, I logged something');
@@ -37,20 +39,20 @@ $lastLoggedActivity->description; //returns 'Look, I logged something'
 ```
 
 
-Here's an example on [event logging](https://docs.spatie.be/laravel-activitylog/v1/advanced-usage/logging-model-events).
+Here's an example on [event logging](https://docs.spatie.be/laravel-activitylog/v2/advanced-usage/logging-model-events).
 
 ```php
 $newsItem->name = 'updated name';
 $newsItem->save();
 
-//updating the newsItem will cause an activity being logged
+//updating the newsItem will cause the logging of an activity
 $activity = Activity::all()->last();
 
 $activity->description; //returns 'updated'
 $activity->subject; //returns the instance of NewsItem that was created
 ```
 
-Calling `$activity->changes` will return this array:
+Calling `$activity->changes()` will return this array:
 
 ```php
 [
@@ -67,11 +69,11 @@ Calling `$activity->changes` will return this array:
 
 
 ## Documentation
-You'll find the documentation on [https://docs.spatie.be/laravel-activitylog/v2](https://docs.spatie.be/laravel-activitylog/v2).
+You'll find the documentation on [https://docs.spatie.be/laravel-activitylog/v3](https://docs.spatie.be/laravel-activitylog/v3).
 
 Find yourself stuck using the package? Found a bug? Do you have general questions or suggestions for improving the activity log? Feel free to [create an issue on GitHub](https://github.com/spatie/laravel-activitylog/issues), we'll try to address it as soon as possible.
 
-If you've found a bug regarding security please mail [freek@spatie.be](mailto:freek@spatie.be) instead of using the issue tracker.
+If you've found a security issue please mail [freek@spatie.be](mailto:freek@spatie.be) instead of using the issue tracker.
 
 
 ## Installation
@@ -91,7 +93,7 @@ php artisan vendor:publish --provider="Spatie\Activitylog\ActivitylogServiceProv
 
 *Note*: The default migration assumes you are using integers for your model IDs. If you are using UUIDs, or some other format, adjust the format of the subject_id and causer_id fields in the published migration before continuing.
 
-After the migration has been published you can create the `activity_log` table by running the migrations:
+After publishing the migration you can create the `activity_log` table by running the migrations:
 
 
 ```bash
@@ -108,47 +110,62 @@ This is the contents of the published config file:
 ```php
 return [
 
-    /**
-     * When set to false, no activities will be saved to database.
+    /*
+     * If set to false, no activities will be saved to the database.
      */
     'enabled' => env('ACTIVITY_LOGGER_ENABLED', true),
 
-    /**
-     * When running the clean-command all recording activites older than
+    /*
+     * When the clean-command is executed, all recording activities older than
      * the number of days specified here will be deleted.
      */
     'delete_records_older_than_days' => 365,
 
-
-    /**
-     * When not specifying a log name when logging activity
-     * we'll using this log name.
+    /*
+     * If no log name is passed to the activity() helper
+     * we use this default log name.
      */
     'default_log_name' => 'default',
 
+    /*
+     * You can specify an auth driver here that gets user models.
+     * If this is null we'll use the default Laravel auth driver.
+     */
+    'default_auth_driver' => null,
 
-    /**
-     * When set to true, the subject returns soft deleted models.
+    /*
+     * If set to true, the subject returns soft deleted models.
      */
-     'subject_returns_soft_deleted_models' => false,
-     
-     
-    /**
-     * This model will be used to log activity. The only requirement is that
-     * it should be or extend the Spatie\Activitylog\Models\Activity model.
+    'subject_returns_soft_deleted_models' => false,
+
+    /*
+     * This model will be used to log activity.
+     * It should be implements the Spatie\Activitylog\Contracts\Activity interface
+     * and extend Illuminate\Database\Eloquent\Model.
      */
-    'activity_model' => \Spatie\Activitylog\Models\Activity::class,     
+    'activity_model' => \Spatie\Activitylog\Models\Activity::class,
+
+    /*
+     * This is the name of the table that will be created by the migration and
+     * used by the Activity model shipped with this package.
+     */
+    'table_name' => 'activity_log',
 ];
 ```
 
 ## Changelog
 
-Please see [CHANGELOG](CHANGELOG.md) for more information what has changed recently.
+Please see [CHANGELOG](CHANGELOG.md) for more information about recent changes.
+
+## Upgrading
+
+Please see [UPGRADING](UPGRADING.md) for details.
+
 
 ## Testing
 
 ``` bash
-$ composer test
+composer test
 ```
 
 ## Contributing

@@ -2,6 +2,108 @@
 
 All notable changes to `spatie/laravel-activitylog` will be documented in this file
 
+## 3.5.0 - 2019-04-15
+
+- add days option to clean command [#497](https://github.com/spatie/laravel-activitylog/pull/497)
+- add `LogsActivity::$submitEmptyLogs` [#514](https://github.com/spatie/laravel-activitylog/pull/514)
+
+## 3.4.0 - 2019-04-09
+
+- use `Illuminate\Contracts\Config\Repository` instead of `Illuminate\Config\Repository` [#505](https://github.com/spatie/laravel-activitylog/pull/505)
+- fix `logChanges()` [#512](https://github.com/spatie/laravel-activitylog/pull/512)
+
+## 3.3.0 - 2019-04-08
+
+- drop support for Laravel 5.7 and lower
+- drop support for PHP 7.1 and lower
+
+## 3.2.2 - 2019-02-27
+
+- add support for Laravel 5.8
+- fix logging hidden attributes
+- fix logging for a causer model without a provider
+- add code coverage reporting for repository
+
+## 3.2.1 - 2019-02-01
+
+- use Str:: and Arr:: instead of helper methods
+
+## 3.2.0 - 2019-01-29
+
+- add `ActivityLogger::tap()` method
+- add `LogsActivity::tapActivity()` method
+- the `ActivityLogger` will work on an activity model instance instead of cache variables
+
+## 3.1.2 - 2018-10-18
+
+- add `shouldLogUnguarded()` method
+- fix typo in methodname `shouldLogOnlyDirty()`
+
+## 3.1.1 - 2018-10-17
+
+- fix `$logUnguarded`
+
+## 3.1.0 - 2018-10-17
+
+- add `$logUnguarded`
+
+## 3.0.0 - 2018-10-16 
+- the preferred way to get changes on an `Activity` model is through the `changes` property instead of the `changes()` function 
+- the `activity` relation of the `CausesActivity` trait has been renamed to `actions`
+- the `activity` relation of the `LogsActivity` trait has been renamed to `activities`
+- the deprecated `loggedActivity` relation has been removed
+- the `HasActivity` trait has been removed.
+- fix for setting a custom table name for the `Activity` model via the `$table` property
+- support for PHP 7.0 has been dropped
+
+## 2.8.4. - 2018-09-23
+- improve migration
+
+## 2.8.3 - 2018-09-01
+- add support for L5.7
+
+## 2.8.2 - 2018-07-28
+- allow `null` to be passed to `causedBy`
+
+## 2.8.1 - 2018-07-28
+- make sure a fresh instance of `ActivityLogger` is used
+
+## 2.8.0 - 2018-07-21
+- add `enableLogging()` and `disableLogging()`
+
+## 2.7.0 - 2018-06-18
+- add ability to ignore changes to attributes specified in  `$logAttributesToIgnore`
+
+## 2.6.0 - 2018-04-03
+- add `table_name` config option
+
+## 2.5.1 - 2018-02-11
+- improve support for soft deletes
+
+## 2.5.0 - 2018-02-09
+- allow model to override the default log name
+
+## 2.4.2 - 2018-02-08
+- add compatibility with L5.6
+
+## 2.4.1 - 2018-01-20
+- use a `text` column for `description`
+
+## 2.4.0 - 2018-01-20
+- add `HasActivity`
+
+## 2.3.2 - 2017-12-13
+- fix bugs concerning `attributesToBeLogged`
+
+## 2.3.1 - 2017-11-13
+- allow nullable relation when using `logChanges`
+
+## 2.3.0 - 2017-11-07
+- add a `log` argument to `activitylog:clean`
+
+## 2.2.0 - 2017-10-16
+- add support for logging all changed attributes using `*`
+
 ## 2.1.2 - 2017-09-28
 - fix for logging changes attributes when deleting soft deletable models
 

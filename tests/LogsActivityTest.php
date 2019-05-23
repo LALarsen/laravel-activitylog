@@ -2,21 +2,31 @@
 
 namespace Spatie\Activitylog\Test;
 
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Activitylog\Test\Models\User;
 use Spatie\Activitylog\Test\Models\Article;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LogsActivityTest extends TestCase
 {
-    /** @var \Spatie\Activitylog\Test\Article|\Spatie\Activitylog\Traits\LogsActivity */
+    /** @var \Spatie\Activitylog\Test\Models\Article|\Spatie\Activitylog\Traits\LogsActivity */
     protected $article;
+    /** @var \Spatie\Activitylog\Test\Models\User|\Spatie\Activitylog\Traits\LogsActivity */
+    protected $user;
 
-    public function setUp()
+    public function setUp(): void
     {
         parent::setUp();
 
         $this->article = new class() extends Article {
+            use LogsActivity;
+            use SoftDeletes;
+        };
+
+        $this->user = new class() extends User {
             use LogsActivity;
             use SoftDeletes;
         };
@@ -154,7 +164,7 @@ class LogsActivityTest extends TestCase
         $article->name = 'changed name';
         $article->save();
 
-        $activities = $article->activity;
+        $activities = $article->activities;
 
         $this->assertCount(2, $activities);
     }
@@ -171,7 +181,7 @@ class LogsActivityTest extends TestCase
 
         $article->delete();
 
-        $activities = $article->activity;
+        $activities = $article->activities;
 
         $this->assertCount(3, $activities);
 
@@ -182,7 +192,7 @@ class LogsActivityTest extends TestCase
     }
 
     /** @test */
-    public function it_can_log_activity_to_log_named_in_the_model()
+    public function it_can_log_activity_to_log_returned_from_model_method_override()
     {
         $articleClass = new class() extends Article {
             use LogsActivity;
@@ -202,6 +212,26 @@ class LogsActivityTest extends TestCase
     }
 
     /** @test */
+    public function it_can_log_activity_to_log_named_in_the_model()
+    {
+        $articleClass = new class() extends Article {
+            use LogsActivity;
+
+            protected static $logName = 'custom_log';
+        };
+
+        $article = new $articleClass();
+        $article->name = 'my name';
+        $article->save();
+
+        $this->assertSame('custom_log', Activity::latest()->first()->log_name);
+    }
+
+    /**
+     * @test
+     *
+     * @requires !Travis
+     */
     public function it_will_not_log_an_update_of_the_model_if_only_ignored_attributes_are_changed()
     {
         $articleClass = new class() extends Article {
@@ -242,13 +272,95 @@ class LogsActivityTest extends TestCase
         $entity->name = 'my name';
         $entity->save();
 
-        $activities = $entity->activity;
+        $activities = $entity->activities;
 
         $this->assertCount(2, $activities);
         $this->assertEquals($entity->id, $activities[0]->subject->id);
         $this->assertEquals($entity->id, $activities[1]->subject->id);
         $this->assertEquals(':causer.name created', $activities[0]->description);
         $this->assertEquals(':causer.name updated', $activities[1]->description);
+    }
+
+    /** @test */
+    public function it_can_log_activity_on_subject_by_same_causer()
+    {
+        $user = $this->loginWithFakeUser();
+
+        $user->name = 'LogsActivity Name';
+        $user->save();
+
+        $this->assertCount(1, Activity::all());
+
+        $this->assertInstanceOf(get_class($this->user), $this->getLastActivity()->subject);
+        $this->assertEquals($user->id, $this->getLastActivity()->subject->id);
+        $this->assertEquals($user->id, $this->getLastActivity()->causer->id);
+        $this->assertCount(1, $user->activities);
+        $this->assertCount(1, $user->actions);
+    }
+
+    /** @test */
+    public function it_can_log_activity_when_attributes_are_changed_with_tap()
+    {
+        $model = new class() extends Article {
+            use LogsActivity;
+
+            protected $properties = [
+                'property' => [
+                    'subProperty' => 'value',
+                ],
+            ];
+
+            public function tapActivity(Activity $activity, string $eventName)
+            {
+                $properties = $this->properties;
+                $properties['event'] = $eventName;
+                $activity->properties = collect($properties);
+                $activity->created_at = Carbon::yesterday()->startOfDay();
+            }
+        };
+
+        $entity = new $model();
+        $entity->save();
+
+        $firstActivity = $entity->activities()->first();
+
+        $this->assertInstanceOf(Collection::class, $firstActivity->properties);
+        $this->assertEquals('value', $firstActivity->getExtraProperty('property.subProperty'));
+        $this->assertEquals('created', $firstActivity->getExtraProperty('event'));
+        $this->assertEquals(Carbon::yesterday()->startOfDay()->format('Y-m-d H:i:s'), $firstActivity->created_at->format('Y-m-d H:i:s'));
+    }
+
+    /** @test */
+    public function it_will_not_submit_log_when_there_is_no_changes()
+    {
+        $model = new class() extends Article {
+            use LogsActivity;
+
+            protected static $submitEmptyLogs = false;
+            protected static $logAttributes = ['text'];
+            protected static $logOnlyDirty = true;
+        };
+
+        $entity = new $model(['text' => 'test']);
+        $entity->save();
+
+        $this->assertCount(1, Activity::all());
+
+        $entity->name = 'my name';
+        $entity->save();
+
+        $this->assertCount(1, Activity::all());
+    }
+
+    public function loginWithFakeUser()
+    {
+        $user = new $this->user();
+
+        $user::find(1);
+
+        $this->be($user);
+
+        return $user;
     }
 
     protected function createArticle(): Article

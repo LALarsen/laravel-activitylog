@@ -3,18 +3,19 @@
 namespace Spatie\Activitylog\Test;
 
 use Auth;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
 use Spatie\Activitylog\Test\Models\User;
 use Spatie\Activitylog\Test\Models\Article;
 use Spatie\Activitylog\Exceptions\CouldNotLogActivity;
 
-class ActivityloggerTest extends TestCase
+class ActivityLoggerTest extends TestCase
 {
     /** @var string */
     protected $activityDescription;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->activityDescription = 'My activity';
 
@@ -242,5 +243,58 @@ class ActivityloggerTest extends TestCase
         $activityModel = activity()->log('test');
 
         $this->assertInstanceOf($activityClassName, $activityModel);
+    }
+
+    /** @test */
+    public function it_will_not_log_an_activity_when_the_log_is_manually_disabled()
+    {
+        activity()->disableLogging();
+
+        activity()->log($this->activityDescription);
+
+        $this->assertNull($this->getLastActivity());
+    }
+
+    /** @test */
+    public function it_will_log_an_activity_when_the_log_is_manually_enabled()
+    {
+        config(['activitylog.enabled' => false]);
+
+        activity()->enableLogging();
+
+        activity()->log($this->activityDescription);
+
+        $this->assertEquals($this->activityDescription, $this->getLastActivity()->description);
+    }
+
+    /** @test */
+    public function it_accepts_null_parameter_for_caused_by()
+    {
+        activity()->causedBy(null)->log('nothing');
+
+        $this->markTestAsPassed();
+    }
+
+    /** @test */
+    public function it_can_log_activity_when_attributes_are_changed_with_tap()
+    {
+        $properties = [
+            'property' => [
+                'subProperty' => 'value',
+            ],
+        ];
+
+        activity()
+            ->tap(function (Activity $activity) use ($properties) {
+                $activity->properties = collect($properties);
+                $activity->created_at = Carbon::yesterday()->startOfDay();
+            })
+            ->log($this->activityDescription);
+
+        $firstActivity = Activity::first();
+
+        $this->assertInstanceOf(Collection::class, $firstActivity->properties);
+        $this->assertEquals('value', $firstActivity->getExtraProperty('property.subProperty'));
+        $this->assertEquals(Carbon::yesterday()->startOfDay()->format('Y-m-d H:i:s'), $firstActivity->created_at->format('Y-m-d H:i:s'));
     }
 }

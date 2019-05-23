@@ -1,6 +1,6 @@
 <?php
 
-namespace Spatie\Activitylog\Models;
+namespace Spatie\Activitylog\Test\Models;
 
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -11,6 +11,8 @@ use Spatie\Activitylog\Contracts\Activity as ActivityContract;
 
 class Activity extends Model implements ActivityContract
 {
+    protected $table;
+
     public $guarded = [];
 
     protected $casts = [
@@ -19,9 +21,7 @@ class Activity extends Model implements ActivityContract
 
     public function __construct(array $attributes = [])
     {
-        if (! isset($this->table)) {
-            $this->setTable(config('activitylog.table_name'));
-        }
+        $this->table = config('activitylog.table_name');
 
         parent::__construct($attributes);
     }
@@ -51,12 +51,9 @@ class Activity extends Model implements ActivityContract
             return new Collection();
         }
 
-        return $this->properties->only(['attributes', 'old']);
-    }
-
-    public function getChangesAttribute(): Collection
-    {
-        return $this->changes();
+        return collect(array_filter($this->properties->toArray(), function ($key) {
+            return in_array($key, ['attributes', 'old']);
+        }, ARRAY_FILTER_USE_KEY));
     }
 
     public function scopeInLog(Builder $query, ...$logNames): Builder
@@ -80,5 +77,10 @@ class Activity extends Model implements ActivityContract
         return $query
             ->where('subject_type', $subject->getMorphClass())
             ->where('subject_id', $subject->getKey());
+    }
+
+    public function getCustomPropertyAttribute()
+    {
+        return $this->changes();
     }
 }
