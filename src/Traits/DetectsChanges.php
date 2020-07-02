@@ -2,8 +2,9 @@
 
 namespace Spatie\Activitylog\Traits;
 
-use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Spatie\Activitylog\Exceptions\CouldNotLogChanges;
 
 trait DetectsChanges
@@ -17,7 +18,13 @@ trait DetectsChanges
 
                 //temporary hold the original attributes on the model
                 //as we'll need these in the updating event
-                $oldValues = $model->replicate()->setRawAttributes($model->getOriginal());
+                if (method_exists(Model::class, 'getRawOriginal')) {
+                    // Laravel >7.0
+                    $oldValues = (new static)->setRawAttributes($model->getRawOriginal());
+                } else {
+                    // Laravel <7.0
+                    $oldValues = (new static)->setRawAttributes($model->getOriginal());
+                }
 
                 $model->oldAttributes = static::logChanges($oldValues);
             });
@@ -84,23 +91,31 @@ trait DetectsChanges
         }
 
         $properties['attributes'] = static::logChanges(
-            $this->exists
-                ? $this->fresh() ?? $this
-                : $this
+            $processingEvent == 'retrieved'
+                ? $this
+                : (
+                    $this->exists
+                        ? $this->fresh() ?? $this
+                        : $this
+                )
         );
 
         if (static::eventsToBeRecorded()->contains('updated') && $processingEvent == 'updated') {
             $nullProperties = array_fill_keys(array_keys($properties['attributes']), null);
 
             $properties['old'] = array_merge($nullProperties, $this->oldAttributes);
+
+            $this->oldAttributes = [];
         }
 
-        if ($this->shouldlogOnlyDirty() && isset($properties['old'])) {
+        if ($this->shouldLogOnlyDirty() && isset($properties['old'])) {
             $properties['attributes'] = $this->array_diff_assoc_recursive(
-                                            $properties['attributes'],
-                                            $properties['old']
-                                        );
-            $properties['old'] = collect($properties['old'])->only(array_keys($properties['attributes']))->all();
+                $properties['attributes'],
+                $properties['old']
+            );
+            $properties['old'] = collect($properties['old'])
+                ->only(array_keys($properties['attributes']))
+                ->all();
         }
 
         return $properties;
@@ -110,18 +125,42 @@ trait DetectsChanges
     {
         $changes = [];
         $attributes = $model->attributesToBeLogged();
-        $model = clone $model;
-        $model->append(array_filter($attributes, function ($key) use ($model) {
-            return ! array_key_exists($key, $model->getAttributes()) && $model->hasGetMutator($key);
-        }));
-        $model->setHidden(array_diff($model->getHidden(), $attributes));
-        $collection = collect($model);
 
         foreach ($attributes as $attribute) {
             if (Str::contains($attribute, '.')) {
                 $changes += self::getRelatedModelAttributeValue($model, $attribute);
-            } else {
-                $changes += $collection->only($attribute)->toArray();
+
+                continue;
+            }
+
+            if (Str::contains($attribute, '->')) {
+                Arr::set(
+                    $changes,
+                    str_replace('->', '.', $attribute),
+                    static::getModelAttributeJsonValue($model, $attribute)
+                );
+
+                continue;
+            }
+
+            $changes[$attribute] = $model->getAttribute($attribute);
+
+            if (is_null($changes[$attribute])) {
+                continue;
+            }
+
+            if ($model->isDateAttribute($attribute)) {
+                $changes[$attribute] = $model->serializeDate(
+                    $model->asDateTime($changes[$attribute])
+                );
+            }
+
+            if ($model->hasCast($attribute)) {
+                $cast = $model->getCasts()[$attribute];
+
+                if ($model->isCustomDateTimeCast($cast)) {
+                    $changes[$attribute] = $model->asDateTime($changes[$attribute])->format(explode(':', $cast, 2)[1]);
+                }
             }
         }
 
@@ -134,11 +173,22 @@ trait DetectsChanges
             throw CouldNotLogChanges::invalidAttribute($attribute);
         }
 
-        list($relatedModelName, $relatedAttribute) = explode('.', $attribute);
+        [$relatedModelName, $relatedAttribute] = explode('.', $attribute);
+
+        $relatedModelName = Str::camel($relatedModelName);
 
         $relatedModel = $model->$relatedModelName ?? $model->$relatedModelName();
 
         return ["{$relatedModelName}.{$relatedAttribute}" => $relatedModel->$relatedAttribute ?? null];
+    }
+
+    protected static function getModelAttributeJsonValue(Model $model, string $attribute)
+    {
+        $path = explode('->', $attribute);
+        $modelAttribute = array_shift($path);
+        $modelAttribute = collect($model->getAttribute($modelAttribute));
+
+        return data_get($modelAttribute, implode('.', $path));
     }
 
     private function array_diff_assoc_recursive($array1, $array2): array

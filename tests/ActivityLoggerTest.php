@@ -4,11 +4,12 @@ namespace Spatie\Activitylog\Test;
 
 use Auth;
 use Carbon\Carbon;
+use Exception;
 use Illuminate\Support\Collection;
-use Spatie\Activitylog\Models\Activity;
-use Spatie\Activitylog\Test\Models\User;
-use Spatie\Activitylog\Test\Models\Article;
 use Spatie\Activitylog\Exceptions\CouldNotLogActivity;
+use Spatie\Activitylog\Models\Activity;
+use Spatie\Activitylog\Test\Models\Article;
+use Spatie\Activitylog\Test\Models\User;
 
 class ActivityLoggerTest extends TestCase
 {
@@ -196,6 +197,32 @@ class ActivityLoggerTest extends TestCase
     }
 
     /** @test */
+    public function it_can_log_activity_using_an_anonymous_causer()
+    {
+        activity()
+            ->causedByAnonymous()
+            ->log('hello poetsvrouwman');
+
+        $this->assertNull($this->getLastActivity()->causer_id);
+        $this->assertNull($this->getLastActivity()->causer_type);
+    }
+
+    /** @test */
+    public function it_will_override_the_logged_in_user_as_the_causer_when_an_anonymous_causer_is_specified()
+    {
+        $userId = 1;
+
+        Auth::login(User::find($userId));
+
+        activity()
+            ->byAnonymous()
+            ->log('hello poetsvrouwman');
+
+        $this->assertNull($this->getLastActivity()->causer_id);
+        $this->assertNull($this->getLastActivity()->causer_type);
+    }
+
+    /** @test */
     public function it_can_replace_the_placeholders()
     {
         $article = Article::create(['name' => 'article name']);
@@ -296,5 +323,83 @@ class ActivityLoggerTest extends TestCase
         $this->assertInstanceOf(Collection::class, $firstActivity->properties);
         $this->assertEquals('value', $firstActivity->getExtraProperty('property.subProperty'));
         $this->assertEquals(Carbon::yesterday()->startOfDay()->format('Y-m-d H:i:s'), $firstActivity->created_at->format('Y-m-d H:i:s'));
+    }
+
+    /** @test */
+    public function it_will_log_a_custom_created_at_date_time()
+    {
+        $activityDateTime = now()->subDays(10);
+
+        activity()
+            ->createdAt($activityDateTime)
+            ->log('created');
+
+        $firstActivity = Activity::first();
+
+        $this->assertEquals($activityDateTime->toAtomString(), $firstActivity->created_at->toAtomString());
+    }
+
+    /** @test */
+    public function it_will_disable_logs_for_a_callback()
+    {
+        $result = activity()->withoutLogs(function () {
+            activity()->log('created');
+
+            return 'hello';
+        });
+
+        $this->assertNull($this->getLastActivity());
+        $this->assertEquals('hello', $result);
+    }
+
+    /** @test */
+    public function it_will_disable_logs_for_a_callback_without_affecting_previous_state()
+    {
+        activity()->withoutLogs(function () {
+            activity()->log('created');
+        });
+
+        $this->assertNull($this->getLastActivity());
+
+        activity()->log('outer');
+
+        $this->assertEquals('outer', $this->getLastActivity()->description);
+    }
+
+    /** @test */
+    public function it_will_disable_logs_for_a_callback_without_affecting_previous_state_even_when_already_disabled()
+    {
+        activity()->disableLogging();
+
+        activity()->withoutLogs(function () {
+            activity()->log('created');
+        });
+
+        $this->assertNull($this->getLastActivity());
+
+        activity()->log('outer');
+
+        $this->assertNull($this->getLastActivity());
+    }
+
+    /** @test */
+    public function it_will_disable_logs_for_a_callback_without_affecting_previous_state_even_with_exception()
+    {
+        activity()->disableLogging();
+
+        try {
+            activity()->withoutLogs(function () {
+                activity()->log('created');
+                throw new Exception('OH NO');
+            });
+        } catch (Exception $ex) {
+            //
+        }
+
+        $this->assertNull($this->getLastActivity());
+
+        activity()->log('outer');
+
+        $this->assertNull($this->getLastActivity());
     }
 }

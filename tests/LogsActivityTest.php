@@ -3,12 +3,13 @@
 namespace Spatie\Activitylog\Test;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Activity;
-use Spatie\Activitylog\Test\Models\User;
 use Spatie\Activitylog\Test\Models\Article;
+use Spatie\Activitylog\Test\Models\Issue733;
+use Spatie\Activitylog\Test\Models\User;
 use Spatie\Activitylog\Traits\LogsActivity;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LogsActivityTest extends TestCase
 {
@@ -331,6 +332,26 @@ class LogsActivityTest extends TestCase
     }
 
     /** @test */
+    public function it_can_log_activity_when_description_is_changed_with_tap()
+    {
+        $model = new class() extends Article {
+            use LogsActivity;
+
+            public function tapActivity(Activity $activity, string $eventName)
+            {
+                $activity->description = 'my custom description';
+            }
+        };
+
+        $entity = new $model();
+        $entity->save();
+
+        $firstActivity = $entity->activities()->first();
+
+        $this->assertEquals('my custom description', $firstActivity->description);
+    }
+
+    /** @test */
     public function it_will_not_submit_log_when_there_is_no_changes()
     {
         $model = new class() extends Article {
@@ -350,6 +371,72 @@ class LogsActivityTest extends TestCase
         $entity->save();
 
         $this->assertCount(1, Activity::all());
+    }
+
+    /** @test */
+    public function it_will_submit_a_log_with_json_changes()
+    {
+        $model = new class() extends Article {
+            use LogsActivity;
+
+            protected static $submitEmptyLogs = false;
+            protected static $logAttributes = ['text', 'json->data'];
+            public static $logOnlyDirty = true;
+            protected $casts = [
+                'json' => 'collection',
+            ];
+        };
+
+        $entity = new $model([
+            'text' => 'test',
+            'json' => [
+                'data' => 'oldish',
+            ],
+        ]);
+
+        $entity->save();
+
+        $this->assertCount(1, Activity::all());
+
+        $entity->json = [
+            'data' => 'chips',
+            'irrelevant' => 'should not be',
+        ];
+
+        $entity->save();
+
+        $expectedChanges = [
+            'attributes' => [
+                'json' => [
+                    'data' => 'chips',
+                ],
+            ],
+            'old' => [
+                'json' => [
+                    'data' => 'oldish',
+                ],
+            ],
+        ];
+
+        $changes = $this->getLastActivity()->changes()->toArray();
+
+        $this->assertCount(2, Activity::all());
+        $this->assertSame($expectedChanges, $changes);
+    }
+
+    /** @test */
+    public function it_will_log_the_retrieval_of_the_model()
+    {
+        $article = Issue733::create(['name' => 'my name']);
+
+        $retrieved = Issue733::whereKey($article->getKey())->first();
+        $this->assertTrue($article->is($retrieved));
+
+        $activity = $this->getLastActivity();
+
+        $this->assertInstanceOf(get_class($article), $activity->subject);
+        $this->assertTrue($article->is($activity->subject));
+        $this->assertEquals('retrieved', $activity->description);
     }
 
     public function loginWithFakeUser()
